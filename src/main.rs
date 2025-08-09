@@ -142,6 +142,8 @@ impl<S: AsRef<str>> From<S> for Language {
 
 #[derive(Debug, Parser)]
 struct OnamerConfig {
+    // TODO: starts_with
+
     #[clap(long = "min", default_value = "2")]
     min_syl: usize,
     #[clap(long = "max", default_value = "3")]
@@ -274,6 +276,8 @@ fn main() {
         anal.print_info();
     }
 
+    // TODO: loop until all words became valid
+    // it needs regenerate also ((((
     let inter_res = anal.analyze(config.hand_optimized, config.smooth_optimized);
     println!("ANALYSIS INFO:");
     for (word, valid) in inter_res {
