@@ -1,6 +1,10 @@
 use clap::Parser;
 use rand::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+trait Logger {
+    fn print_info(&self);
+}
 
 fn str_to_vec(s: &str) -> Vec<char> {
     s.chars().collect()
@@ -144,7 +148,12 @@ struct OnamerConfig {
     max_syl: usize,
 
     #[clap(short = 'c', long = "count", default_value = "10")]
-    word_count: usize,
+    word_count: usize, 
+
+    #[clap(short = 'H', long = "hand")]
+    hand_optimized: bool,
+    #[clap(short = 'S', long = "smooth")]
+    smooth_optimized: bool,
 
     #[clap(short = 'L', long, default_value = "english")]
     language: Language,
@@ -155,7 +164,7 @@ struct OnamerConfig {
     quiet: bool,
 }
 
-impl OnamerConfig {
+impl Logger for OnamerConfig {
     fn print_info(&self) {
         println!("INFO:");
         println!("  language: {:?}", self.language);
@@ -168,29 +177,109 @@ impl OnamerConfig {
     }
 }
 
+struct Analyzer {
+    input: Vec<String>,
+}
+
+impl Logger for Analyzer {
+    fn print_info(&self) {
+        println!("INFO:");
+        println!("  len: {}", self.input.len());
+        println!();
+    }
+}
+
+impl Analyzer {
+    fn new<S: AsRef<str>>(input: &[S]) -> Self {
+        Self {
+            input: input.iter().map(|w| w.as_ref().to_string()).collect(),
+        }
+    }
+    fn analyze(&self, hand_optimized: bool, smooth_optimized: bool) -> HashMap<String, bool> {
+        let mut result = HashMap::new();
+        for w in &self.input {
+            result.insert(w.to_string(), Self::analyze_word(w, hand_optimized, smooth_optimized));
+        }
+        result
+    }
+    fn analyze_word(word: &str, hand_optimized: bool, smooth_optimized: bool) -> bool {
+        let mut chs = word.chars().peekable();
+        let mut prev = chs.next().unwrap();
+        while let Some(c) = chs.next() {
+            match (hand_optimized, smooth_optimized) {
+                (true, true) => {
+                    if !(Self::is_hand_optimized(prev, c) || Self::is_smooth_optimized(prev, c)) {
+                        return false;
+                    }
+                },
+                (true, _) => {
+                    if !Self::is_hand_optimized(prev, c) {
+                        return false;
+                    }
+                },
+                (_, true) => {
+                    if !Self::is_smooth_optimized(prev, c) {
+                        return false;
+                    }
+                },
+                _ => return true,
+            }
+            prev = c;
+        }
+        return true;
+    }
+    fn is_hand_optimized(lc: char, rc: char) -> bool {
+        (is_left_hand(lc) && is_right_hand(rc)) || (is_right_hand(lc) && is_left_hand(rc))
+    }
+    fn is_smooth_optimized(lc: char, rc: char) -> bool {
+        // TODO: implement this shit
+        false
+    }
+}
+
 fn main() {
     let config = OnamerConfig::parse();
     if config.verbose {
         config.print_info()
     }
 
+    let mut words = Vec::new();
+
     match config.language {
         Language::English => {
             let eng = English::default();
-            println!("GENERAGE:");
             for _ in 0..config.word_count {
                 let word = eng.gen_word(config.min_syl, config.max_syl);
-                println!(" * {word}");
+                words.push(word);
             }
         }
         Language::Japanese => {
             let jp = Japanese::default();
-            println!("GENERAGE:");
             for _ in 0..config.word_count {
                 let word = jp.gen_word(config.min_syl, config.max_syl);
-                println!(" * {word}");
+                words.push(word);
             }
-
         },
+    }
+
+    if config.verbose {
+        println!("GENERATED:");
+        words.iter().for_each(|w| println!(" * {w}"));
+        println!();
+    }
+
+    let anal = Analyzer::new(words.as_slice());
+
+    if config.verbose {
+        anal.print_info();
+    }
+
+    let inter_res = anal.analyze(config.hand_optimized, config.smooth_optimized);
+    println!("ANALYSIS INFO:");
+    for (word, valid) in inter_res {
+        if valid {
+            println!(" * {}", word);
+        }
+        // println!(" * {} is {}valid", word, if valid { "" } else { "in" });
     }
 }
